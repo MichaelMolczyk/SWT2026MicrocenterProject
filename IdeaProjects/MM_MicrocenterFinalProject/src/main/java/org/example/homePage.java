@@ -1,6 +1,5 @@
 package org.example;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
 import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
@@ -21,26 +20,19 @@ public class homePage {
 
     @BeforeMethod
     public void setUp() {
-        WebDriverManager.edgedriver().setup();
         EdgeOptions options = new EdgeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--window-size=1920,1080");
+        options.setExperimentalOption("debuggerAddress", "localhost:9222");
 
         driver = new EdgeDriver(options);
-        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
-        driver.manage().window().maximize();
         wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
-        driver.get(BASE_URL);
+        TestUtils.navigateTo(driver, BASE_URL);
     }
 
     @AfterMethod
     public void tearDown() {
-        if (driver != null) {
-            driver.quit();
-        }
+        driver = null;
     }
 
     // =========================================================================
@@ -48,17 +40,17 @@ public class homePage {
     // =========================================================================
     @Test(description = "HP_01: Verify user can scroll through Top Deals By Category using the horizontal scrollbar")
     public void testTopDealsScroll() {
-        // Locate the "Top Deals By Category" container — it uses a horizontal scrollbar, not arrows
+        // Locate the "Top Deals By Category" container on the homepage
+        // Try multiple selectors: section with "deal" class, div.DEALWrap, or div with deal/Deal id
         WebElement dealsContainer = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.xpath("//h2[contains(text(),'Top Deals')] /ancestor::div[contains(@class,'container') " +
-                         "or contains(@class,'section') or contains(@class,'deals')]" +
-                         " | //div[contains(@class,'topDeals') or contains(@class,'top-deals') " +
-                         "or contains(@class,'TopDeals')]")));
+                By.xpath("//section[contains(@class,'deal') or contains(@class,'Deal')] " +
+                         "| //div[contains(@class,'DEALWrap')] " +
+                         "| //div[contains(@id,'deal') or contains(@id,'Deal')] " +
+                         "| //h2[contains(text(),'Top Deals')]/ancestor::div[1]")));
 
         // Scroll the container into view first
-        ((JavascriptExecutor) driver).executeScript(
-                "arguments[0].scrollIntoView(true);", dealsContainer);
-        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+        TestUtils.scrollTo(driver, dealsContainer);
+        TestUtils.sleep(500);
 
         // Find the scrollable inner element (the one with overflow-x: auto/scroll)
         WebElement scrollable = (WebElement) ((JavascriptExecutor) driver).executeScript(
@@ -81,7 +73,7 @@ public class homePage {
         // Scroll the container 400px to the right using JavaScript
         ((JavascriptExecutor) driver).executeScript(
                 "arguments[0].scrollLeft += 400;", scrollable);
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        TestUtils.sleep(1000);
 
         // Verify the scroll position changed
         Long scrollAfter = (Long) ((JavascriptExecutor) driver).executeScript(
@@ -96,12 +88,12 @@ public class homePage {
     // =========================================================================
     @Test(description = "HP_02: Verify user can add item from the Memory category in Top Deals")
     public void testTopDealsAddMemory() {
-        // Locate the "Top Deals By Category" section
+        // Locate the "Top Deals By Category" section on the homepage
         WebElement dealsSection = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.xpath("//h2[contains(text(),'Top Deals')] /ancestor::div[contains(@class,'container') " +
-                         "or contains(@class,'section') or contains(@class,'deals')]" +
-                         " | //div[contains(@class,'topDeals') or contains(@class,'top-deals') " +
-                         "or contains(@class,'TopDeals')]")));
+                By.xpath("//section[contains(@class,'deal') or contains(@class,'Deal')] " +
+                         "| //div[contains(@class,'DEALWrap')] " +
+                         "| //div[contains(@id,'deal') or contains(@id,'Deal')] " +
+                         "| //h2[contains(text(),'Top Deals')]/ancestor::div[1]")));
 
         // Find the scrollable element inside the deals section
         WebElement scrollable = (WebElement) ((JavascriptExecutor) driver).executeScript(
@@ -130,20 +122,32 @@ public class homePage {
             // Scroll right to find the Memory category
             ((JavascriptExecutor) driver).executeScript(
                     "arguments[0].scrollLeft += 400;", scrollable);
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            TestUtils.sleep(500);
         }
         Assert.assertNotNull(memoryCard,
                 "Could not find the MEMORY category in Top Deals after scrolling.");
 
         // Find the ADD TO CART button within the Memory category card
-        WebElement addButton = memoryCard.findElement(
-                By.cssSelector("button[class*='add'], input[value*='Add' i], " +
-                               "[class*='addtocart'], [class*='atc'], a[class*='add']"));
+        List<WebElement> addButtons = TestUtils.findAddToCartButtons(driver);
+        WebElement addButton = null;
+        for (WebElement btn : addButtons) {
+            if (memoryCard.findElements(By.xpath(".//" + btn.getTagName() +
+                    "[@" + (btn.getAttribute("class") != null ? "class" : "id") + "='" +
+                    (btn.getAttribute("class") != null ? btn.getAttribute("class") : btn.getAttribute("id")) + "']")).size() > 0) {
+                addButton = btn;
+                break;
+            }
+        }
+        if (addButton == null) {
+            addButton = memoryCard.findElement(
+                    By.cssSelector("button[class*='add'], input[value*='Add' i], " +
+                                   "[class*='addtocart'], [class*='atc'], a[class*='add']"));
+        }
         Assert.assertTrue(addButton.isDisplayed(),
                 "ADD TO CART button not visible in the Memory category card.");
 
-        // Click ADD TO CART
-        addButton.click();
+        // Click ADD TO CART using safe click
+        TestUtils.safeClick(driver, addButton);
 
         // Verify a cart modal/popup or confirmation appears
         WebElement response = wait.until(ExpectedConditions.visibilityOfElementLocated(
@@ -162,9 +166,8 @@ public class homePage {
         // Scroll down to the side ad carousel (the PowerSpec ad area with < > arrows)
         WebElement sideCarousel = wait.until(ExpectedConditions.visibilityOfElementLocated(
                 By.cssSelector("[class*='slide'], [class*='carousel'], [class*='banner']")));
-        ((JavascriptExecutor) driver).executeScript(
-                "arguments[0].scrollIntoView({block:'center'});", sideCarousel);
-        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+        TestUtils.scrollTo(driver, sideCarousel);
+        TestUtils.sleep(500);
 
         // Find the right (next) arrow — the ">" button
         WebElement rightArrow = wait.until(ExpectedConditions.elementToBeClickable(
@@ -182,16 +185,16 @@ public class homePage {
 
         // Click right arrow 5 times to cycle forward through the ads
         for (int i = 0; i < 5; i++) {
-            rightArrow.click();
-            try { Thread.sleep(800); } catch (InterruptedException ignored) {}
+            TestUtils.safeClick(driver, rightArrow);
+            TestUtils.sleep(800);
         }
         Assert.assertTrue(sideCarousel.isDisplayed(),
                 "Side ad carousel not visible after clicking right arrow 5 times.");
 
         // Click left arrow 6 times to cycle back past the start
         for (int i = 0; i < 6; i++) {
-            leftArrow.click();
-            try { Thread.sleep(800); } catch (InterruptedException ignored) {}
+            TestUtils.safeClick(driver, leftArrow);
+            TestUtils.sleep(800);
         }
         Assert.assertTrue(sideCarousel.isDisplayed(),
                 "Side ad carousel not visible after clicking left arrow 6 times.");
@@ -205,31 +208,31 @@ public class homePage {
         // Scroll to the side ad carousel
         WebElement sideCarousel = wait.until(ExpectedConditions.visibilityOfElementLocated(
                 By.cssSelector("[class*='slide'], [class*='carousel'], [class*='banner']")));
-        ((JavascriptExecutor) driver).executeScript(
-                "arguments[0].scrollIntoView({block:'center'});", sideCarousel);
-        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+        TestUtils.scrollTo(driver, sideCarousel);
+        TestUtils.sleep(500);
 
         // Locate the dot indicators (the circles at the bottom of the carousel)
+        // Use Slick.js dot pattern: .slick-dots li button or .slick-dots li
         List<WebElement> dots = driver.findElements(
-                By.cssSelector("[class*='dot'], [class*='indicator'] li, " +
+                By.cssSelector(".slick-dots li button, .slick-dots li, " +
+                               "[class*='dot'], [class*='indicator'] li, " +
                                "[class*='pagination'] li, [class*='pagination'] button, " +
-                               ".slick-dots li, .slick-dots button, " +
                                "[class*='swiper-pagination'] span"));
         Assert.assertTrue(dots.size() >= 2,
                 "Expected at least 2 dot indicators, found " + dots.size());
 
         // Click each dot forward (first to last)
         for (int i = 0; i < dots.size(); i++) {
-            dots.get(i).click();
-            try { Thread.sleep(800); } catch (InterruptedException ignored) {}
+            TestUtils.safeClick(driver, dots.get(i));
+            TestUtils.sleep(800);
             Assert.assertTrue(sideCarousel.isDisplayed(),
                     "Carousel not visible after clicking dot " + (i + 1) + " (forward).");
         }
 
         // Click each dot backward (last to first)
         for (int i = dots.size() - 1; i >= 0; i--) {
-            dots.get(i).click();
-            try { Thread.sleep(800); } catch (InterruptedException ignored) {}
+            TestUtils.safeClick(driver, dots.get(i));
+            TestUtils.sleep(800);
             Assert.assertTrue(sideCarousel.isDisplayed(),
                     "Carousel not visible after clicking dot " + (i + 1) + " (backward).");
         }
@@ -240,22 +243,24 @@ public class homePage {
     // =========================================================================
     @Test(description = "HP_05: Verify top ad carousel changes with arrow navigation")
     public void testTopAdChangeWithArrow() {
-        // Locate the top/hero banner carousel (usually the first major carousel)
+        // Locate the top/hero banner carousel using Slick.js pattern
+        // div.ad-hero-slider.slider-container.slider--arrows.slider--dots
         WebElement topCarousel = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.cssSelector("[class*='hero'], [class*='banner'], " +
-                               "[class*='carousel']:first-of-type, " +
-                               "[class*='top-slider'], [class*='main-banner']")));
+                By.xpath("//div[contains(@class,'ad-hero-slider')] " +
+                         "| //div[contains(@class,'hero')] " +
+                         "| //div[contains(@class,'banner') and contains(@class,'slider')]")));
         Assert.assertTrue(topCarousel.isDisplayed(), "Top ad carousel not found.");
 
-        // Find next arrow
+        // Find next arrow using Slick.js .slick-next selector
         List<WebElement> arrows = driver.findElements(
-                By.cssSelector("[class*='hero'] [class*='next'], " +
-                               "[class*='banner'] [class*='next'], " +
-                               "[class*='swiper-button-next'], .slick-next"));
+                By.cssSelector(".slick-next, " +
+                               "div.ad-hero-slider .slick-next, " +
+                               "[class*='hero'] .slick-next, " +
+                               "[class*='banner'] .slick-next"));
         Assert.assertFalse(arrows.isEmpty(), "No arrow found for top ad carousel.");
 
-        arrows.get(0).click();
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        TestUtils.safeClick(driver, arrows.get(0));
+        TestUtils.sleep(1000);
         Assert.assertTrue(topCarousel.isDisplayed(),
                 "Top ad carousel not visible after clicking arrow.");
     }
@@ -265,29 +270,30 @@ public class homePage {
     // =========================================================================
     @Test(description = "HP_06: Verify top ad carousel changes with dot selection")
     public void testTopAdChangeWithDot() {
-        // Locate the top banner area
+        // Locate the top banner area using Slick.js pattern
         WebElement topBanner = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.cssSelector("[class*='hero'], [class*='banner'], " +
-                               "[class*='carousel']:first-of-type, " +
-                               "[class*='top-slider'], [class*='main-banner']")));
+                By.xpath("//div[contains(@class,'ad-hero-slider')] " +
+                         "| //div[contains(@class,'hero')] " +
+                         "| //div[contains(@class,'banner') and contains(@class,'slider')]")));
 
-        // Find dot indicators within or near the top banner
+        // Find dot indicators using Slick.js pattern: .slick-dots li button or .slick-dots li
         List<WebElement> dots = topBanner.findElements(
-                By.cssSelector("[class*='dot'], [class*='indicator'], " +
+                By.cssSelector(".slick-dots li button, .slick-dots li, " +
+                               "[class*='dot'], [class*='indicator'], " +
                                "[class*='pagination'] li, [class*='pagination'] button, " +
-                               ".slick-dots li, [class*='swiper-pagination'] span"));
+                               "[class*='swiper-pagination'] span"));
 
         if (dots.isEmpty()) {
             dots = driver.findElements(
-                    By.cssSelector("[class*='dot'], [class*='indicator'], " +
-                                   ".slick-dots li"));
+                    By.cssSelector(".slick-dots li button, .slick-dots li, " +
+                                   "[class*='dot'], [class*='indicator']"));
         }
         Assert.assertFalse(dots.isEmpty(), "No dot indicators found for top ad carousel.");
 
         int dotIndex = dots.size() > 1 ? 1 : 0;
-        dots.get(dotIndex).click();
+        TestUtils.safeClick(driver, dots.get(dotIndex));
 
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        TestUtils.sleep(1000);
         Assert.assertTrue(topBanner.isDisplayed(),
                 "Top ad carousel not visible after clicking dot.");
     }

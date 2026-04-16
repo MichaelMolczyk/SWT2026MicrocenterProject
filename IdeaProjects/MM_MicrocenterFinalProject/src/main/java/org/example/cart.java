@@ -1,6 +1,5 @@
 package org.example;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
 import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
@@ -17,19 +16,15 @@ public class cart {
     private WebDriver driver;
     private WebDriverWait wait;
     private static final String BASE_URL = "https://www.microcenter.com";
+    private static final String TOP_DEALS_URL = "https://www.microcenter.com/search/search_results.aspx?Ntk=all&sortby=pricelow&N=4294966937&myStore=true";
 
     @BeforeMethod
     public void setUp() {
-        WebDriverManager.edgedriver().setup();
         EdgeOptions options = new EdgeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--window-size=1920,1080");
+        options.setExperimentalOption("debuggerAddress", "localhost:9222");
 
         driver = new EdgeDriver(options);
-        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
-        driver.manage().window().maximize();
         wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
         // Add an item to the cart first, then navigate to the cart page
@@ -38,31 +33,39 @@ public class cart {
 
     @AfterMethod
     public void tearDown() {
-        if (driver != null) {
-            driver.quit();
-        }
+        driver = null;
+    }
+
+    private void navigateTo(String url) {
+        ((JavascriptExecutor) driver).executeScript("window.location.href = arguments[0];", url);
+        new WebDriverWait(driver, Duration.ofSeconds(30)).until(
+                d -> ((JavascriptExecutor) d).executeScript("return document.readyState").equals("complete"));
+        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
     }
 
     // =========================================================================
-    // Helper: Add an item to the cart from the home page so the cart isn't empty
+    // Helper: Add an item to the cart so the cart isn't empty
+    // Navigates to Top Deals page where product_wrapper structure is reliable
     // =========================================================================
     private void addItemToCart() {
-        driver.get(BASE_URL);
+        // Navigate to Top Deals page where we can reliably find ADD TO CART buttons
+        navigateTo(TOP_DEALS_URL);
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // Find and click the first ADD TO CART button on the home page
+        // Find ADD TO CART button using the actual DOM structure:
+        // li.product_wrapper > div.cartadd > form.crtfrm.ajaxForm > button.btn-add.STBTN
         List<WebElement> addButtons = driver.findElements(
-                By.xpath("//button[contains(text(),'ADD TO CART')] | " +
-                         "//a[contains(text(),'ADD TO CART')] | " +
-                         "//input[contains(@value,'ADD TO CART')] | " +
-                         "//button[contains(text(),'Add to Cart')]"));
+                By.cssSelector("li.product_wrapper div.cartadd form.crtfrm.ajaxForm button.btn-add.STBTN"));
 
         if (addButtons.isEmpty()) {
+            // Fallback: broader search
             addButtons = driver.findElements(
-                    By.cssSelector("button[class*='add-to-cart'], [class*='addtocart'], " +
-                                   "button[class*='atc'], input[value*='Add to Cart' i]"));
+                    By.xpath("//button[contains(@name,'ADDtoCART')] | " +
+                             "//button[contains(@value,'ADD TO CART')] | " +
+                             "//button[contains(text(),'ADD TO CART')]"));
         }
         Assert.assertFalse(addButtons.isEmpty(),
-                "No ADD TO CART buttons found on the home page to set up cart.");
+                "No ADD TO CART buttons found on Top Deals page to set up cart.");
 
         ((JavascriptExecutor) driver).executeScript(
                 "arguments[0].scrollIntoView({block:'center'});", addButtons.get(0));
@@ -71,15 +74,15 @@ public class cart {
 
         // Wait for the "Added to Cart" popup
         wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.xpath("//*[contains(text(),'Added to Cart')]")));
+                By.cssSelector("div.ui-dialog")));
         try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
 
         // Click VIEW CART to go to the cart page
         WebElement viewCartBtn = wait.until(ExpectedConditions.elementToBeClickable(
-                By.xpath("//button[contains(text(),'VIEW CART')] | " +
-                         "//a[contains(text(),'VIEW CART')] | " +
-                         "//button[contains(text(),'View Cart')] | " +
-                         "//a[contains(text(),'View Cart')]")));
+                By.xpath("//a[contains(text(),'VIEW CART')] | " +
+                         "//button[contains(text(),'VIEW CART')] | " +
+                         "//a[contains(text(),'View Cart')] | " +
+                         "//button[contains(text(),'View Cart')]")));
         viewCartBtn.click();
 
         // Wait for cart page to load
@@ -97,7 +100,7 @@ public class cart {
         WebElement listButton = wait.until(ExpectedConditions.elementToBeClickable(
                 By.xpath("//button[contains(text(),'List')] | " +
                          "//a[contains(text(),'List')] | " +
-                         "//button[contains(@class,'list')] | " +
+                         "//button[contains(text(),'list' )] | " +
                          "//span[contains(text(),'List')]/parent::button | " +
                          "//span[contains(text(),'List')]/parent::a")));
         Assert.assertTrue(listButton.isDisplayed(), "List button not found on cart item.");
@@ -106,8 +109,7 @@ public class cart {
         listButton.click();
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // Verify the item was moved — either a confirmation appears,
-        // the "Your List" section updates, or the cart item count changes
+        // Verify the item was moved — confirmation appears or list section updates
         List<WebElement> listSection = driver.findElements(
                 By.xpath("//*[contains(text(),'Your List')] | " +
                          "//*[contains(text(),'List (')]"));
@@ -142,9 +144,7 @@ public class cart {
 
         // Find the "Pickup" button in the Your List section
         WebElement pickupButton = wait.until(ExpectedConditions.elementToBeClickable(
-                By.xpath("//div[contains(@class,'list') or preceding::*[contains(text(),'Your List')]]" +
-                         "//button[contains(text(),'Pickup')] | " +
-                         "//div[contains(@class,'list') or preceding::*[contains(text(),'Your List')]]" +
+                By.xpath("//button[contains(text(),'Pickup')] | " +
                          "//a[contains(text(),'Pickup')] | " +
                          "//span[contains(text(),'Pickup')]/parent::button | " +
                          "//span[contains(text(),'Pickup')]/parent::a")));
@@ -156,7 +156,6 @@ public class cart {
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
         // Verify the item was moved back to the cart
-        // Cart count or cart section should update
         List<WebElement> cartItems = driver.findElements(
                 By.xpath("//*[contains(text(),'Cart (')] | " +
                          "//div[contains(@class,'cart')]//div[contains(@class,'item')]"));
@@ -178,6 +177,7 @@ public class cart {
         WebElement removeButton = wait.until(ExpectedConditions.elementToBeClickable(
                 By.xpath("//button[contains(text(),'Remove')] | " +
                          "//a[contains(text(),'Remove')] | " +
+                         "//button[contains(text(),'REMOVE')] | " +
                          "//span[contains(text(),'Remove')]/parent::button | " +
                          "//span[contains(text(),'Remove')]/parent::a")));
         Assert.assertTrue(removeButton.isDisplayed(),
@@ -187,8 +187,7 @@ public class cart {
         removeButton.click();
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // Verify the item was removed — either the cart count decreased,
-        // the item is gone, or an "empty cart" message appears
+        // Verify the item was removed
         List<WebElement> cartItemsAfter = driver.findElements(
                 By.cssSelector("[class*='cartItem'], [class*='cart-item'], " +
                                "[class*='line-item'], [class*='lineItem']"));
@@ -228,7 +227,7 @@ public class cart {
 
         boolean newWindow = driver.getWindowHandles().size() > 1;
         boolean urlChanged = !currentUrl.toLowerCase().contains("cart") ||
-                             currentUrl.toLowerCase().contains("map");
+                currentUrl.toLowerCase().contains("map");
 
         Assert.assertTrue(!mapElements.isEmpty() || newWindow || urlChanged,
                 "No map displayed and no navigation occurred after clicking MAP YOUR TRIP.");
@@ -290,13 +289,10 @@ public class cart {
                 "No Print button found on the store map.");
 
         // Click the Print button
-        // Note: This will trigger the browser print dialog.
-        // We verify the button is clickable; the actual print dialog
-        // is a native OS dialog that Selenium cannot interact with.
         printButtons.get(0).click();
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // Dismiss print dialog if possible (press Escape)
+        // Dismiss print dialog if possible
         try {
             driver.switchTo().alert().dismiss();
         } catch (NoAlertPresentException e) {

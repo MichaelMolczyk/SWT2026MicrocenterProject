@@ -1,17 +1,13 @@
 package org.example;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.*;
 import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
-import org.openqa.selenium.interactions.Actions;
-import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.Assert;
 import org.testng.annotations.*;
 
 import java.time.Duration;
-import java.util.List;
 
 public class pcCompare {
 
@@ -53,46 +49,28 @@ public class pcCompare {
 
     @BeforeMethod
     public void setUp() {
-        WebDriverManager.edgedriver().setup();
         EdgeOptions options = new EdgeOptions();
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
-        options.addArguments("--window-size=1920,1080");
+        options.setExperimentalOption("debuggerAddress", "localhost:9222");
 
         driver = new EdgeDriver(options);
-        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
-        driver.manage().window().maximize();
         wait = new WebDriverWait(driver, Duration.ofSeconds(15));
 
-        driver.get(BASE_URL);
+        TestUtils.navigateTo(driver, BASE_URL);
     }
 
     @AfterMethod
     public void tearDown() {
-        if (driver != null) {
-            driver.quit();
-        }
+        driver = null;
     }
 
     // =========================================================================
     // Helper: Get the href from the PC Parts dropdown for a given link text
+    //         Uses TestUtils.findDropdownLink to get the dropdown link after hovering
     // =========================================================================
     private String getDropdownHref(String linkText) {
-        // Hover over the "PC Parts" tab in the top navigation to reveal dropdown
-        WebElement pcPartsTab = wait.until(ExpectedConditions.presenceOfElementLocated(
-                By.xpath("//a[contains(text(),'PC Parts') or contains(text(),'PC PARTS') " +
-                         "or contains(text(),'Parts')]" +
-                         "[contains(@class,'nav') or ancestor::*[contains(@class,'nav') " +
-                         "or contains(@class,'menu') or contains(@id,'nav')]]")));
-
-        Actions actions = new Actions(driver);
-        actions.moveToElement(pcPartsTab).perform();
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
-
-        // Find the specific link in the dropdown
-        WebElement dropdownLink = wait.until(ExpectedConditions.visibilityOfElementLocated(
-                By.xpath("//a[contains(normalize-space(text()),'" + linkText + "')]")));
+        // Find "Parts" tab and get the dropdown link within it
+        WebElement dropdownLink = TestUtils.findDropdownLink(driver, wait, "Parts", linkText);
         String href = dropdownLink.getAttribute("href");
         Assert.assertNotNull(href,
                 "Dropdown link '" + linkText + "' has no href attribute.");
@@ -104,12 +82,11 @@ public class pcCompare {
     // =========================================================================
     private String getPageHref(String linkText) {
         // Navigate to the PC Parts category page
-        driver.get("https://www.microcenter.com/site/products/parts.aspx");
-        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+        TestUtils.navigateTo(driver, "https://www.microcenter.com/site/products/parts.aspx");
 
         // Find the link in the sidebar or main content
-        WebElement pageLink = wait.until(ExpectedConditions.presenceOfElementLocated(
-                By.xpath("//a[contains(normalize-space(text()),'" + linkText + "')]")));
+        WebElement pageLink = TestUtils.findFirst(driver, wait,
+                By.xpath("//a[contains(normalize-space(),'" + linkText + "')]"));
         String href = pageLink.getAttribute("href");
         Assert.assertNotNull(href,
                 "Page link '" + linkText + "' has no href attribute.");
@@ -123,8 +100,8 @@ public class pcCompare {
         String dropdownHref = getDropdownHref(DROPDOWN_OPTIONS[index]);
 
         // Navigate back to the home page to then go to the PC Parts page
-        driver.get(BASE_URL);
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        TestUtils.navigateTo(driver, BASE_URL);
+        TestUtils.sleep(500);
 
         String pageHref = getPageHref(PAGE_NAMES[index]);
 
