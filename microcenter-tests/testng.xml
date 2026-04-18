@@ -1,0 +1,52 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Microcenter Test Suite" parallel="classes" thread-count="1">
+
+    <test name="Home Page Tests">
+        <classes>
+            <class name="org.example.homePage"/>
+        </classes>
+    </test>
+
+    <test name="Top Deals Page Tests">
+        <classes>
+            <class name="org.example.topDealsPage"/>
+        </classes>
+    </test>
+
+    <test name="Add To Cart Tests">
+        <classes>
+            <class name="org.example.addToCart"/>
+        </classes>
+    </test>
+
+    <test name="Cart Tests">
+        <classes>
+            <class name="org.example.cart"/>
+        </classes>
+    </test>
+
+    <test name="Computer Page Element Tests">
+        <classes>
+            <class name="org.example.compPage"/>
+        </classes>
+    </test>
+
+    <test name="Computer Dropdown Compare Tests">
+        <classes>
+            <class name="org.example.compCompare"/>
+        </classes>
+    </test>
+
+    <test name="PC Parts Dropdown Compare Tests">
+        <classes>
+            <class name="org.example.pcCompare"/>
+        </classes>
+    </test>
+
+    <test name="Apple Dropdown Compare Tests">
+        <classes>
+            <class name="org.example.appleCompare"/>
+        </classes>
+    </test>
+
+</suite>

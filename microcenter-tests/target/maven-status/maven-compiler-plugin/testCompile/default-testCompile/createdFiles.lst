@@ -1,0 +1,9 @@
+com\microcenter\base\BaseTest.class
+com\microcenter\tests\ComputersPageTest.class
+com\microcenter\tests\AddToCartTest.class
+com\microcenter\tests\AppleDropdownTest.class
+com\microcenter\tests\HomePageTest.class
+com\microcenter\tests\TopDealsPageTest.class
+com\microcenter\tests\ComputerDropdownTest.class
+com\microcenter\tests\CartOptionsTest.class
+com\microcenter\tests\PCPartsDropdownTest.class
